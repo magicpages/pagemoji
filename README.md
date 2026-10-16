@@ -27,22 +27,22 @@ All widgets on a page load with a single request.
 
 ### Only a header or footer field?
 
-The script can place the widget itself. `data-mount` takes `before:`, `after:`, `prepend:` or `append:` and a CSS selector; nothing happens on pages where the selector doesn't match. `data-label` and `data-variant` work like the attributes above.
+The script can place the widget itself. With `data-mount="auto"` it goes at the end of the post body on single posts in Ghost and WordPress, whatever the theme, and stays out of pages, the home page and archives. `data-label` and `data-variant` work like the attributes above.
 
 ```html
 <script src="https://pagemoji.magicpages.co/v1/pagemoji.js" defer
   data-emojis="❤️ 👏 💡"
   data-label="What did you think?"
-  data-mount="after:article"></script>
+  data-mount="auto"></script>
 ```
 
-Pick a selector that only matches on posts; your browser's inspector shows which element holds the post body.
+`auto` looks for Ghost's `.gh-content`, and otherwise for the element with the most paragraphs. To choose the spot yourself, give `before:`, `after:`, `prepend:` or `append:` and a CSS selector, e.g. `data-mount="after:.post-body"`; nothing happens on pages where the selector doesn't match.
 
 ## Platforms
 
 ### Ghost
 
-Paste the header/footer snippet into **Settings → Code injection → Site footer**, with `data-mount="after:.gh-content"`: `.gh-content` is the post body in Ghost's official themes.
+Paste the header/footer snippet into **Settings → Code injection → Site footer**.
 
 Or edit your theme to key counts by post ID, so they survive slug changes. In `post.hbs`, inside the `{{#post}}` block (where `{{content}}` is):
 
@@ -60,7 +60,7 @@ Outside those blocks `{{id}}` is empty, the widget falls back to the URL, and th
 
 ### WordPress
 
-With a header/footer plugin, use the snippet with `data-mount="after:.entry-content"`, the post body in most themes.
+With a header/footer plugin, use the header/footer snippet.
 
 Or, in a classic theme's `single.php`, inside the loop:
 
@@ -84,8 +84,8 @@ Fine-tune with custom properties. Each one is optional; the defaults are shown.
 pagemoji-reactions {
   --pagemoji-accent: var(--ghost-accent-color, currentColor);
   --pagemoji-fg: inherit;
-  --pagemoji-font-size: 0.9375rem;
-  --pagemoji-gap: 0.5rem;
+  --pagemoji-font-size: 0.875em; /* of the surrounding text */
+  --pagemoji-gap: 0.5em;
   --pagemoji-justify: flex-start; /* center, flex-end */
   --pagemoji-radius: 999px;
   --pagemoji-padding: 0.3em 0.75em;

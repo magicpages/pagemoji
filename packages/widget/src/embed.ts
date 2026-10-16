@@ -63,11 +63,11 @@ export interface EmbedOptions {
   variant?: WidgetVariant;
   /** Text shown before the buttons, e.g. "What did you think?". Not used on cards. */
   label?: string;
-  /** Where `inject` mounts the widget. Defaults to Ghost's post body. */
+  /** Where `inject` mounts the widget. Defaults to `auto`: after the post body, on posts only. */
   mount?: string;
 }
 
-export const DEFAULT_MOUNT = 'after:.gh-content';
+export const DEFAULT_MOUNT = 'auto';
 
 function escape(value: string): string {
   return value

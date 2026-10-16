@@ -24,15 +24,15 @@ const STYLES = `
   --_accent: var(--pagemoji-accent, var(--ghost-accent-color, currentColor));
   display: block;
   color: var(--pagemoji-fg, inherit);
-  font-size: var(--pagemoji-font-size, 0.9375rem);
+  font-size: var(--pagemoji-font-size, 0.875em);
 }
 :host([hidden]) { display: none; }
 .r {
   display: flex; flex-wrap: wrap; align-items: center;
-  gap: var(--pagemoji-gap, 0.5rem);
+  gap: var(--pagemoji-gap, 0.5em);
   justify-content: var(--pagemoji-justify, flex-start);
 }
-.l { margin-inline-end: 0.25rem; }
+.l { margin-inline-end: 0.25em; }
 button, .i {
   display: inline-flex; align-items: center; justify-content: center; gap: 0.4em;
   font: inherit; color: inherit; line-height: 1;
