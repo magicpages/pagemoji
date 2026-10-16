@@ -1,0 +1,29 @@
+{
+  "name": "@magicpages/pagemoji-server",
+  "version": "0.1.0",
+  "description": "The Pagemoji server: emoji reaction counts, no personal data stored.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "tsc --noEmit",
+    "start": "node dist/main.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@hono/node-server": "2.1.5",
+    "@magicpages/pagemoji": "workspace:*",
+    "better-sqlite3": "13.0.3",
+    "hono": "4.13.13"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "9.6.0",
+    "@types/node": "22.20.5",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  }
+}
