@@ -1,6 +1,6 @@
 # Pagemoji
 
-Emoji reactions for any web page. Pick up to five emojis, paste two lines of HTML, and readers react with a click. No account, no cookies, no tracking.
+Emoji reactions for any web page: Ghost, WordPress, a static site generator or plain HTML. Pick up to five emojis, paste two lines of HTML, and readers react with a click. No account, no cookies, no tracking.
 
 Use the free hosted server at `pagemoji.magicpages.co`, or run your own.
 
@@ -23,6 +23,8 @@ Use the free hosted server at `pagemoji.magicpages.co`, or run your own.
 
 Pages are identified by host and path. `www.` is ignored; the query string and fragment are never sent.
 
+All widgets on a page load with a single request.
+
 ### Only a header or footer field?
 
 The script can place the widget itself. `data-mount` takes `before:`, `after:`, `prepend:` or `append:` and a CSS selector; nothing happens on pages where the selector doesn't match. `data-label` and `data-variant` work like the attributes above.
@@ -31,30 +33,48 @@ The script can place the widget itself. `data-mount` takes `before:`, `after:`, 
 <script src="https://pagemoji.magicpages.co/v1/pagemoji.js" defer
   data-emojis="❤️ 👏 💡"
   data-label="What did you think?"
-  data-mount="after:.gh-content"></script>
+  data-mount="after:article"></script>
 ```
+
+Pick a selector that only matches on posts; your browser's inspector shows which element holds the post body.
+
+## Platforms
 
 ### Ghost
 
-Paste the snippet above into **Settings → Code injection → Site footer**. `.gh-content` is the post body in Ghost's default themes.
+Paste the header/footer snippet into **Settings → Code injection → Site footer**, with `data-mount="after:.gh-content"`: `.gh-content` is the post body in Ghost's official themes.
 
-Or, in your theme's `post.hbs`, keyed by post ID so counts survive slug changes:
+Or edit your theme to key counts by post ID, so they survive slug changes. In `post.hbs`, inside the `{{#post}}` block (where `{{content}}` is):
 
 ```handlebars
 <pagemoji-reactions page="{{id}}" label="What did you think?" emojis="❤️ 👏 💡"></pagemoji-reactions>
 ```
 
-And on post cards, read-only:
+And read-only on post cards, inside `{{#foreach posts}}`:
 
 ```handlebars
 <pagemoji-reactions page="{{id}}" emojis="❤️ 👏 💡" readonly></pagemoji-reactions>
 ```
 
-All widgets on a page load with a single request.
+Outside those blocks `{{id}}` is empty, the widget falls back to the URL, and the post and its cards count separately.
 
-### Styling
+### WordPress
 
-The widget takes its colours from your text colour, so it fits light and dark themes without any configuration. Pressed buttons use your accent colour: Ghost's `--ghost-accent-color` when it's set, else the text colour.
+With a header/footer plugin, use the snippet with `data-mount="after:.entry-content"`, the post body in most themes.
+
+Or, in a classic theme's `single.php`, inside the loop:
+
+```php
+<pagemoji-reactions page="<?php the_ID(); ?>" emojis="❤️ 👏 💡"></pagemoji-reactions>
+```
+
+### Static sites
+
+In Hugo, Eleventy, Astro, Jekyll and the like, add the script and element to your post layout. Counts are keyed by URL; if you rename posts, pass something stable from the front matter as `page`.
+
+## Styling
+
+The widget takes its colours from your text colour, so it fits light and dark themes without any configuration. Pressed buttons use `--pagemoji-accent`, which falls back to Ghost's `--ghost-accent-color` and then to the text colour.
 
 Three variants: `soft` (filled, the default), `outline` and `plain` (no chrome until hovered or pressed).
 
