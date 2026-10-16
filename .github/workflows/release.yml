@@ -42,12 +42,15 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
-          node-version: 22
+          node-version: 26
           registry-url: https://registry.npmjs.org
-      - run: corepack enable
+          package-manager-cache: false
+      # Node 25+ no longer ships corepack.
+      - run: npm install --global pnpm@10.12.1
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
       - run: pnpm run test
-      - run: pnpm --filter @magicpages/pagemoji publish --access public --provenance --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # Trusted publishing: npm exchanges the job's OIDC token for a short-lived publish token
+      # and attaches provenance on its own.
+      - run: npm publish --access public
+        working-directory: packages/widget
