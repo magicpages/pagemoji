@@ -14,6 +14,8 @@ Use the free hosted server at `pagemoji.magicpages.co`, or run your own.
 | Attribute  | Default                             |                                                                  |
 | ---------- | ----------------------------------- | ---------------------------------------------------------------- |
 | `emojis`   | `❤️ 👏 💡`                          | One to five emojis, separated by spaces.                         |
+| `label`    |                                     | Text before the buttons, e.g. `What did you think?`              |
+| `variant`  | `soft`                              | `soft`, `outline` or `plain`. See [Styling](#styling).           |
 | `page`     |                                     | A stable page ID, such as a post ID. Counts survive URL changes. |
 | `url`      | canonical URL, else the current URL | The page to count reactions for, when `page` isn't set.          |
 | `readonly` |                                     | Shows counts without buttons.                                    |
@@ -23,15 +25,13 @@ Pages are identified by host and path. `www.` is ignored; the query string and f
 
 ### Only a header or footer field?
 
-The script can place the widget itself. `data-mount` takes `before:`, `after:`, `prepend:` or `append:` and a CSS selector; nothing happens on pages where the selector doesn't match.
+The script can place the widget itself. `data-mount` takes `before:`, `after:`, `prepend:` or `append:` and a CSS selector; nothing happens on pages where the selector doesn't match. `data-label` and `data-variant` work like the attributes above.
 
 ```html
-<script
-  src="https://pagemoji.magicpages.co/v1/pagemoji.js"
-  defer
+<script src="https://pagemoji.magicpages.co/v1/pagemoji.js" defer
   data-emojis="❤️ 👏 💡"
-  data-mount="after:.gh-content"
-></script>
+  data-label="What did you think?"
+  data-mount="after:.gh-content"></script>
 ```
 
 ### Ghost
@@ -41,31 +41,55 @@ Paste the snippet above into **Settings → Code injection → Site footer**. `.
 Or, in your theme's `post.hbs`, keyed by post ID so counts survive slug changes:
 
 ```handlebars
-<pagemoji-reactions page='{{id}}' emojis='❤️ 👏 💡'></pagemoji-reactions>
+<pagemoji-reactions page="{{id}}" label="What did you think?" emojis="❤️ 👏 💡"></pagemoji-reactions>
 ```
 
 And on post cards, read-only:
 
 ```handlebars
-<pagemoji-reactions page='{{id}}' emojis='❤️ 👏 💡' readonly></pagemoji-reactions>
+<pagemoji-reactions page="{{id}}" emojis="❤️ 👏 💡" readonly></pagemoji-reactions>
 ```
 
 All widgets on a page load with a single request.
 
 ### Styling
 
-The widget inherits your font and text color. Adjust it with CSS custom properties, or style the buttons directly with `::part(button)`:
+The widget takes its colours from your text colour, so it fits light and dark themes without any configuration. Pressed buttons use your accent colour: Ghost's `--ghost-accent-color` when it's set, else the text colour.
+
+Three variants: `soft` (filled, the default), `outline` and `plain` (no chrome until hovered or pressed).
+
+Fine-tune with custom properties. Each one is optional; the defaults are shown.
 
 ```css
 pagemoji-reactions {
-  --pagemoji-gap: 0.5rem;
-  --pagemoji-radius: 999px;
-  --pagemoji-bg: transparent;
-  --pagemoji-bg-active: #fde68a;
+  --pagemoji-accent: var(--ghost-accent-color, currentColor);
   --pagemoji-fg: inherit;
-  --pagemoji-font-size: 1rem;
+  --pagemoji-font-size: 0.9375rem;
+  --pagemoji-gap: 0.5rem;
+  --pagemoji-justify: flex-start; /* center, flex-end */
+  --pagemoji-radius: 999px;
+  --pagemoji-padding: 0.3em 0.75em;
+  --pagemoji-bg: color-mix(in srgb, currentColor 5%, transparent);
+  --pagemoji-bg-hover: color-mix(in srgb, currentColor 10%, transparent);
+  --pagemoji-bg-active: color-mix(in srgb, var(--pagemoji-accent) 14%, transparent);
+  --pagemoji-border: color-mix(in srgb, currentColor 14%, transparent);
+  --pagemoji-border-active: color-mix(in srgb, var(--pagemoji-accent) 60%, transparent);
 }
 ```
+
+For anything else, style the parts directly:
+
+```css
+pagemoji-reactions::part(label) { font-style: italic; }
+pagemoji-reactions::part(button) { box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
+pagemoji-reactions::part(pressed) { font-weight: 600; }
+pagemoji-reactions::part(emoji) { font-size: 1.4em; }
+pagemoji-reactions::part(count) { opacity: 0.8; }
+```
+
+`list` wraps everything; `item` is an entry of a read-only widget.
+
+Animations play only when the reader reacts, and are switched off for readers who ask their system for reduced motion.
 
 ## Privacy
 

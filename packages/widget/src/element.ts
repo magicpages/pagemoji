@@ -16,30 +16,59 @@ const DEFAULT_EMOJIS = ['❤️', '👏', '💡'];
 // everything the server needs.
 const REQUEST: RequestInit = { credentials: 'omit', referrerPolicy: 'strict-origin' };
 
+// Every colour derives from the surrounding text colour and an accent, so the
+// widget fits light and dark themes without configuration. Ghost sites supply
+// their accent through --ghost-accent-color.
 const STYLES = `
-:host { display: block; }
-:host([hidden]) { display: none; }
-.r { display: flex; flex-wrap: wrap; gap: var(--pagemoji-gap, 0.5rem); }
-button, span.i {
-  display: inline-flex; align-items: center; gap: 0.375em;
-  font: inherit; font-size: var(--pagemoji-font-size, 1rem); line-height: 1.5;
+:host {
+  --_accent: var(--pagemoji-accent, var(--ghost-accent-color, currentColor));
+  display: block;
   color: var(--pagemoji-fg, inherit);
+  font-size: var(--pagemoji-font-size, 0.9375rem);
+}
+:host([hidden]) { display: none; }
+.r {
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: var(--pagemoji-gap, 0.5rem);
+  justify-content: var(--pagemoji-justify, flex-start);
+}
+.l { margin-inline-end: 0.25rem; }
+button, .i {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.4em;
+  font: inherit; color: inherit; line-height: 1;
 }
 button {
-  padding: 0.25em 0.75em; cursor: pointer;
-  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  min-height: 2.25em;
+  padding: var(--pagemoji-padding, 0.3em 0.75em);
+  border: 1px solid var(--pagemoji-border, color-mix(in srgb, currentColor 14%, transparent));
   border-radius: var(--pagemoji-radius, 999px);
-  background: var(--pagemoji-bg, transparent);
+  background: var(--pagemoji-bg, color-mix(in srgb, currentColor 5%, transparent));
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.15s, border-color 0.15s;
 }
+button:hover { background: var(--pagemoji-bg-hover, color-mix(in srgb, currentColor 10%, transparent)); }
 button[aria-pressed='true'] {
-  border-color: color-mix(in srgb, currentColor 50%, transparent);
-  background: var(--pagemoji-bg-active, color-mix(in srgb, currentColor 12%, transparent));
+  border-color: var(--pagemoji-border-active, color-mix(in srgb, var(--_accent) 60%, transparent));
+  background: var(--pagemoji-bg-active, color-mix(in srgb, var(--_accent) 14%, transparent));
 }
-button:active { background: color-mix(in srgb, currentColor 20%, transparent); }
-button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
-.c { font-variant-numeric: tabular-nums; }
+button:active { background: color-mix(in srgb, var(--_accent) 24%, transparent); }
+button:focus-visible { outline: 2px solid var(--_accent); outline-offset: 2px; }
+:host([variant='outline']) button:not(:hover, [aria-pressed='true']) { background: transparent; }
+:host([variant='plain']) button { padding-inline: 0.5em; border-color: transparent; }
+:host([variant='plain']) button:not(:hover, :active, [aria-pressed='true']) { background: transparent; }
+.e { position: relative; display: inline-block; }
+.g { display: inline-block; font-size: 1.2em; }
+.c { display: inline-block; min-width: 1ch; font-variant-numeric: tabular-nums; }
 .c:empty { display: none; }
+[aria-pressed='true'] .c { font-weight: 600; }
+.i .c { opacity: 0.75; }
+.p { position: absolute; left: 50%; top: 50%; translate: -50% -50%; font-size: 0.6em; pointer-events: none; }
 [hidden] { display: none !important; }
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .g { transition: transform 0.15s ease-out; }
+  button:hover .g { transform: scale(1.15); }
+}
 `;
 
 let defaultApi: string | undefined;
@@ -54,8 +83,13 @@ function parseUrl(value: string): URL | null {
 
 interface Item {
   element: HTMLElement;
+  /** Holds the emoji and, briefly, the burst around it. */
+  burst: HTMLElement;
+  glyph: HTMLElement;
   count: HTMLElement;
 }
+
+const BURST_SIZE = 6;
 
 export class PagemojiReactions extends HTMLElement {
   static #queue: PagemojiReactions[] = [];
@@ -148,19 +182,36 @@ export class PagemojiReactions extends HTMLElement {
     const readonly = this.hasAttribute('readonly');
     const list = document.createElement('div');
     list.className = 'r';
+    list.setAttribute('part', 'list');
+    const text = this.getAttribute('label')?.trim();
+    if (text) {
+      const label = document.createElement('span');
+      label.className = 'l';
+      label.setAttribute('part', 'label');
+      label.textContent = text;
+      list.append(label);
+    }
     for (const emoji of this.#emojis) {
       const element = document.createElement(readonly ? 'span' : 'button');
+      const burst = document.createElement('span');
+      const glyph = document.createElement('span');
       const count = document.createElement('span');
+      burst.className = 'e';
+      glyph.className = 'g';
+      glyph.setAttribute('part', 'emoji');
       count.className = 'c';
-      element.append(emoji, count);
+      count.setAttribute('part', 'count');
+      glyph.textContent = emoji;
+      burst.append(glyph);
+      element.append(burst, count);
       if (element instanceof HTMLButtonElement) {
         element.type = 'button';
-        element.setAttribute('part', 'button');
         element.addEventListener('click', () => void this.#toggle(emoji));
       } else {
         element.className = 'i';
+        element.setAttribute('part', 'item');
       }
-      this.#items.set(emoji, { element, count });
+      this.#items.set(emoji, { element, burst, glyph, count });
       list.append(element);
     }
     const style = document.createElement('style');
@@ -175,7 +226,59 @@ export class PagemojiReactions extends HTMLElement {
       const value = this.#counts[emoji] ?? 0;
       count.textContent = value > 0 ? format.format(value) : '';
       if (readonly) element.hidden = value === 0;
-      else element.setAttribute('aria-pressed', String(this.#pressed.has(emoji)));
+      else {
+        const pressed = this.#pressed.has(emoji);
+        element.setAttribute('aria-pressed', String(pressed));
+        element.setAttribute('part', pressed ? 'button pressed' : 'button');
+      }
+    }
+  }
+
+  /**
+   * Feedback for the reader's own click, never for counts loading or changing
+   * by themselves. Adding celebrates; taking a reaction back stays quiet.
+   */
+  #animate(emoji: string, adding: boolean): void {
+    const item = this.#items.get(emoji);
+    if (!item || !window.matchMedia?.('(prefers-reduced-motion: no-preference)').matches) return;
+    const { burst, glyph, count } = item;
+    for (const animation of glyph.getAnimations()) animation.cancel();
+
+    glyph.animate(
+      {
+        transform: adding
+          ? ['scale(1)', 'scale(1.4)', 'scale(0.92)', 'scale(1)']
+          : ['scale(1)', 'scale(0.8)', 'scale(1)'],
+      },
+      { duration: adding ? 400 : 200, easing: 'ease-out' },
+    );
+    if (count.textContent) {
+      count.animate(
+        { transform: [`translateY(${adding ? 0.4 : -0.4}em)`, 'none'], opacity: [0, 1] },
+        { duration: 200, easing: 'ease-out' },
+      );
+    }
+    if (!adding) return;
+
+    const offset = Math.random();
+    for (let i = 0; i < BURST_SIZE; i++) {
+      const angle = ((i + offset) / BURST_SIZE) * 2 * Math.PI;
+      const distance = 1.3 + Math.random() * 0.5;
+      const particle = document.createElement('span');
+      particle.className = 'p';
+      particle.textContent = emoji;
+      particle.setAttribute('aria-hidden', 'true');
+      burst.append(particle);
+      particle.animate(
+        {
+          transform: [
+            'scale(0.6)',
+            `translate(${Math.cos(angle) * distance}em, ${Math.sin(angle) * distance}em) scale(0.3)`,
+          ],
+          opacity: [1, 1, 0],
+        },
+        { duration: 450, easing: 'cubic-bezier(0.2, 0.7, 0.3, 1)' },
+      ).onfinish = () => particle.remove();
     }
   }
 
@@ -192,6 +295,7 @@ export class PagemojiReactions extends HTMLElement {
     flip(adding);
     this.#counts = { ...this.#counts, [emoji]: Math.max(0, previous + (adding ? 1 : -1)) };
     this.#update();
+    this.#animate(emoji, adding);
 
     const body: ReactionRequest = {
       url: this.#url,

@@ -43,7 +43,7 @@ export function parseEmojis(input: string): EmojiSelection {
   return selection;
 }
 
-export type EmbedVariant =
+export type EmbedTarget =
   /** Script and element, for any HTML page. */
   | 'html'
   /** One script tag for header/footer injection; mounts itself after the post body. */
@@ -53,17 +53,23 @@ export type EmbedVariant =
   /** Read-only element for Ghost post cards. */
   | 'ghost-card';
 
+/** `soft` is the default and needs no attribute. */
+export type WidgetVariant = 'soft' | 'outline' | 'plain';
+
 export interface EmbedOptions {
   emojis: readonly string[];
   /** Base URL of the Pagemoji server, e.g. `https://pagemoji.magicpages.co`. */
   server: string;
+  variant?: WidgetVariant;
+  /** Text shown before the buttons, e.g. "What did you think?". Not used on cards. */
+  label?: string;
   /** Where `inject` mounts the widget. Defaults to Ghost's post body. */
   mount?: string;
 }
 
 export const DEFAULT_MOUNT = 'after:.gh-content';
 
-function attr(value: string): string {
+function escape(value: string): string {
   return value
     .replaceAll('&', '&amp;')
     .replaceAll('"', '&quot;')
@@ -71,27 +77,32 @@ function attr(value: string): string {
     .replaceAll('>', '&gt;');
 }
 
-export function embedCode(variant: EmbedVariant, options: EmbedOptions): string {
+export function embedCode(target: EmbedTarget, options: EmbedOptions): string {
   if (options.emojis.length === 0 || options.emojis.length > MAX_EMOJIS_PER_WIDGET) {
     throw new RangeError(`Pick between 1 and ${MAX_EMOJIS_PER_WIDGET} emojis.`);
   }
-  const emojis = attr(options.emojis.join(' '));
-  const script = attr(new URL('/v1/pagemoji.js', options.server).href);
-  switch (variant) {
+  const emojis = escape(options.emojis.join(' '));
+  const script = escape(new URL('/v1/pagemoji.js', options.server).href);
+  const optional = [
+    options.variant && options.variant !== 'soft' ? `variant="${options.variant}"` : '',
+    options.label?.trim() ? `label="${escape(options.label.trim())}"` : '',
+  ].filter(Boolean);
+  const element = (...attributes: string[]) =>
+    `<pagemoji-reactions ${[...attributes, `emojis="${emojis}"`].join(' ')}></pagemoji-reactions>`;
+
+  switch (target) {
     case 'html':
-      return [
-        `<script src="${script}" defer></script>`,
-        `<pagemoji-reactions emojis="${emojis}"></pagemoji-reactions>`,
-      ].join('\n');
+      return `<script src="${script}" defer></script>\n${element(...optional)}`;
     case 'inject':
       return [
         `<script src="${script}" defer`,
         `  data-emojis="${emojis}"`,
-        `  data-mount="${attr(options.mount ?? DEFAULT_MOUNT)}"></script>`,
+        ...optional.map((attribute) => `  data-${attribute}`),
+        `  data-mount="${escape(options.mount ?? DEFAULT_MOUNT)}"></script>`,
       ].join('\n');
     case 'ghost-post':
-      return `<pagemoji-reactions page="{{id}}" emojis="${emojis}"></pagemoji-reactions>`;
+      return element('page="{{id}}"', ...optional);
     case 'ghost-card':
-      return `<pagemoji-reactions page="{{id}}" emojis="${emojis}" readonly></pagemoji-reactions>`;
+      return element('page="{{id}}"', 'readonly');
   }
 }

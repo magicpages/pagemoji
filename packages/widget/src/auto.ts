@@ -12,7 +12,7 @@ if (source && mount) {
     const target = document.querySelector(selector);
     if (!target) return;
     const widget = document.createElement('pagemoji-reactions');
-    for (const name of ['emojis', 'page'] as const) {
+    for (const name of ['emojis', 'page', 'variant', 'label'] as const) {
       const value = source.dataset[name];
       if (value) widget.setAttribute(name, value);
     }

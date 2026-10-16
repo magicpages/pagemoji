@@ -25,13 +25,17 @@ describe('embedCode', () => {
       embedCode('inject', {
         emojis: ['❤️'],
         server: 'https://pagemoji.example/',
-        mount: 'after:[data-x="y"]',
+        variant: 'plain',
+        label: ' Was this "useful"? ',
+        mount: 'after:.post',
       }),
     ).toBe(
       [
         '<script src="https://pagemoji.example/v1/pagemoji.js" defer',
         '  data-emojis="❤️"',
-        '  data-mount="after:[data-x=&quot;y&quot;]"></script>',
+        '  data-variant="plain"',
+        '  data-label="Was this &quot;useful&quot;?"',
+        '  data-mount="after:.post"></script>',
       ].join('\n'),
     );
   });
