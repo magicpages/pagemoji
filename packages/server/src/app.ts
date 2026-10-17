@@ -10,12 +10,13 @@ import {
   type ReactionResponse,
 } from '@magicpages/pagemoji/protocol';
 import { Hono, type Context } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import type { Store } from './db.js';
 import type { Shield } from './shield.js';
 
 const MAX_URL_LENGTH = 2048;
-const MAX_BODY_LENGTH = 4096;
+const MAX_BODY_BYTES = 4096;
 
 export interface AppOptions {
   store: Store;
@@ -64,7 +65,7 @@ export function createApp({
 }: AppOptions): Hono<Env> {
   const app = new Hono<Env>();
   const anyOrigin = allowedOrigins.includes('*');
-  const error = (c: Context, status: 400 | 403 | 429 | 500, message: string) =>
+  const error = (c: Context, status: 400 | 403 | 413 | 429 | 500, message: string) =>
     c.json<ErrorResponse, typeof status>({ error: message }, status);
 
   app.use(
@@ -104,9 +105,14 @@ export function createApp({
     return c.json({ counts: store.counts(normalizeHost(host), keys, emojis) });
   });
 
-  app.post('/v1/reactions', async (c) => {
-    const text = await c.req.text();
-    const parsed = text.length <= MAX_BODY_LENGTH ? parseReaction(text) : null;
+  // Stops reading at the limit, rather than reading the whole body and checking it after.
+  const limitBody = bodyLimit({
+    maxSize: MAX_BODY_BYTES,
+    onError: (c) => error(c, 413, 'Request body too large.'),
+  });
+
+  app.post('/v1/reactions', limitBody, async (c) => {
+    const parsed = parseReaction(await c.req.text());
     if (!parsed) return error(c, 400, 'Expected { url, page?, emoji, action }.');
     const { request, url } = parsed;
 
