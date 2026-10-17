@@ -43,6 +43,16 @@ describe('resolveMount', () => {
     expect(resolveMount('auto', doc)?.target).toBe(doc.querySelector('.entry-content'));
   });
 
+  it('finds a one-paragraph post body among banners and calls to action', () => {
+    const doc = page(`<body class="post-template">
+      <div class="announcement">${paragraphs(1)}<button>Close</button></div>
+      <main><div class="cta">${paragraphs(1)}</div>
+        <article class="prose">${paragraphs(1)}<figure class="kg-card"></figure></article>
+        <div class="comments"><h2>Feedback?</h2>${paragraphs(1)}</div></main></body>`);
+
+    expect(resolveMount('auto', doc)?.target).toBe(doc.querySelector('article.prose'));
+  });
+
   it('stays out of pages, home and tag archives', () => {
     for (const bodyClass of ['page-template', 'home-template', 'tag-template', '']) {
       const doc = page(

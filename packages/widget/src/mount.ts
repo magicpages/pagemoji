@@ -12,26 +12,37 @@ const POST_PAGE = 'body.post-template, body.single-post';
  * `.gh-content` is the post body in Ghost's official themes, even on a members-only post that
  * shows only a signup prompt. Elsewhere it's the element with the most paragraphs as direct
  * children, which holds for Ghost's `{{content}}` and WordPress's `the_content()` whatever the
- * theme calls the wrapper.
+ * theme calls the wrapper. A short post ties with banners and calls to action that hold one
+ * paragraph too, so a tie goes to the element in an `<article>`, then in `<main>`.
  */
 export function findPostBody(root: Document): Element | null {
   if (!root.querySelector(POST_PAGE)) return null;
   const ghost = root.querySelector('.gh-content');
   if (ghost) return ghost;
   const counts = new Map<Element, number>();
-  let best: Element | null = null;
-  let bestCount = 0;
   for (const paragraph of root.querySelectorAll('body p')) {
     const parent = paragraph.parentElement;
     if (!parent || parent.closest('header, footer, nav, aside, form')) continue;
-    const count = (counts.get(parent) ?? 0) + 1;
-    counts.set(parent, count);
-    if (count > bestCount) {
+    counts.set(parent, (counts.get(parent) ?? 0) + 1);
+  }
+  let best: Element | null = null;
+  let bestCount = 0;
+  let bestLandmark = -1;
+  for (const [parent, count] of counts) {
+    if (count < bestCount) continue;
+    const rank = landmark(parent);
+    if (count > bestCount || rank > bestLandmark) {
       best = parent;
       bestCount = count;
+      bestLandmark = rank;
     }
   }
   return best;
+}
+
+function landmark(element: Element): number {
+  if (element.closest('article')) return 2;
+  return element.closest('main') ? 1 : 0;
 }
 
 /** `auto`, or `before:`, `after:`, `prepend:` or `append:` and a CSS selector. */
