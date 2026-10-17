@@ -1,6 +1,6 @@
 {
   "name": "@magicpages/pagemoji-server",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "The Pagemoji server: emoji reaction counts, no personal data stored.",
   "license": "MIT",
   "private": true,

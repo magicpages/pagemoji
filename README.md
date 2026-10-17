@@ -36,7 +36,7 @@ The script can place the widget itself. With `data-mount="auto"` it goes at the 
   data-mount="auto"></script>
 ```
 
-`auto` looks for Ghost's `.gh-content`, and otherwise for the element with the most paragraphs. To choose the spot yourself, give `before:`, `after:`, `prepend:` or `append:` and a CSS selector, e.g. `data-mount="after:.post-body"`; nothing happens on pages where the selector doesn't match.
+`auto` looks for Ghost's `.gh-content`, and otherwise for the element with the most paragraphs, preferring one inside `<article>` or `<main>` when a short post leaves several tied. To choose the spot yourself, give `before:`, `after:`, `prepend:` or `append:` and a CSS selector, e.g. `data-mount="after:.post-body"`; nothing happens on pages where the selector doesn't match.
 
 ## Platforms
 
