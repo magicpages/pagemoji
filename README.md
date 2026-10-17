@@ -116,7 +116,7 @@ Animations play only when the reader reacts, and are switched off for readers wh
 - Nothing is stored on the reader's device: no cookies, no `localStorage`, nothing. Reactions don't survive a reload because there is nowhere to keep them.
 - Requests carry no cookies and no referrer, only the page, the emoji and whether it was added or removed.
 - The database holds one thing: a count per page and emoji.
-- Rate limiting and the one-reaction-per-reader rule run in memory, on an HMAC of the IP address under a random key. The key is replaced every hour, together with everything recorded under it. IP addresses are never stored or logged.
+- Rate limiting and the one-reaction-per-reader rule run in memory, on an HMAC of the IP address (of its /64 for IPv6, the block one connection is given) under a random key. The key is replaced every hour, together with everything recorded under it. IP addresses are never stored or logged.
 - The widget loads nothing from third parties.
 
 Pagemoji stores nothing on the reader's device, so there is nothing for a cookie banner to ask about.
