@@ -53,6 +53,14 @@ describe('resolveMount', () => {
     expect(resolveMount('auto', doc)?.target).toBe(doc.querySelector('article.prose'));
   });
 
+  it('prefers a tied post body inside main over an earlier banner', () => {
+    const doc = page(`<body class="post-template">
+      <div class="announcement">${paragraphs(1)}</div>
+      <main><div class="post-body">${paragraphs(1)}</div></main></body>`);
+
+    expect(resolveMount('auto', doc)?.target).toBe(doc.querySelector('.post-body'));
+  });
+
   it('stays out of pages, home and tag archives', () => {
     for (const bodyClass of ['page-template', 'home-template', 'tag-template', '']) {
       const doc = page(
