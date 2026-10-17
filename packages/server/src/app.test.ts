@@ -129,6 +129,27 @@ describe('POST /v1/reactions', () => {
       expect((await react(like({ emoji }))).status).toBe(200);
     }
   });
+
+  it('rejects an oversized body without reading all of it', async () => {
+    const { app } = setup();
+    const chunk = new TextEncoder().encode('x'.repeat(1024));
+    let read = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (read >= 1024 * 1024) return controller.close();
+        read += chunk.length;
+        controller.enqueue(chunk);
+      },
+    });
+    const response = await app.request('/v1/reactions', {
+      method: 'POST',
+      headers: { 'content-type': 'text/plain', origin: 'https://example.com' },
+      body,
+      duplex: 'half',
+    } as RequestInit);
+    expect(response.status).toBe(413);
+    expect(read).toBeLessThan(64 * 1024);
+  });
 });
 
 describe('GET /v1/counts', () => {
