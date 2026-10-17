@@ -92,6 +92,29 @@ describe('POST /v1/reactions', () => {
     expect(await response.json()).toMatchObject({ applied: false, counts: { '❤️': 1 } });
   });
 
+  it('treats an IPv6 /64 as one client, however the address is written', async () => {
+    const { react } = setup();
+    for (const [ip, applied] of [
+      ['2001:db8:1:2::1', true],
+      ['2001:db8:1:2:ffff:ffff:ffff:9', false],
+      ['2001:0DB8:0001:0002:0000:0000:0000:0005', false],
+      ['2001:db8:1:3::1', true],
+    ] as const) {
+      expect(await (await react(like(), { ip })).json()).toMatchObject({ applied });
+    }
+  });
+
+  it('keeps IPv4 clients apart when they arrive as IPv4-mapped IPv6', async () => {
+    const { react } = setup();
+    for (const [ip, applied] of [
+      ['::ffff:192.0.2.1', true],
+      ['::ffff:192.0.2.2', true],
+      ['192.0.2.1', false],
+    ] as const) {
+      expect(await (await react(like(), { ip })).json()).toMatchObject({ applied });
+    }
+  });
+
   it.each([
     ['no origin', ''],
     ['another site', 'https://evil.example'],
@@ -170,5 +193,14 @@ describe('rate limit', () => {
 
     advance(45_000);
     expect((await counts(query)).status).toBe(200);
+  });
+
+  it('shares the limit across an IPv6 /64', async () => {
+    const { counts } = setup({ requestsPerMinute: 2 });
+    const query = 'host=example.com&key=/&emoji=❤️';
+    expect((await counts(query, '2001:db8::1')).status).toBe(200);
+    expect((await counts(query, '2001:db8::2')).status).toBe(200);
+    expect((await counts(query, '2001:db8::3')).status).toBe(429);
+    expect((await counts(query, '2001:db8:0:1::1')).status).toBe(200);
   });
 });
