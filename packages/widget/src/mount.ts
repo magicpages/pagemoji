@@ -7,6 +7,8 @@ export interface MountPoint {
 
 /** Ghost's `{{body_class}}` and WordPress's `body_class()` mark single posts with these. */
 const POST_PAGE = 'body.post-template, body.single-post';
+/** And pages with these. */
+const PAGE = 'body.page-template, body.page';
 
 /**
  * `.gh-content` is the post body in Ghost's official themes, even on a members-only post that
@@ -16,7 +18,7 @@ const POST_PAGE = 'body.post-template, body.single-post';
  * paragraph too, so a tie goes to the element in an `<article>`, then in `<main>`.
  */
 export function findPostBody(root: Document): Element | null {
-  if (!root.querySelector(POST_PAGE)) return null;
+  if (!root.querySelector(POST_PAGE)) return root.querySelector(PAGE) ? null : findEntryBody(root);
   const ghost = root.querySelector('.gh-content');
   if (ghost) return ghost;
   const counts = new Map<Element, number>();
@@ -43,6 +45,18 @@ export function findPostBody(root: Document): Element | null {
 function landmark(element: Element): number {
   if (element.closest('article')) return 2;
   return element.closest('main') ? 1 : 0;
+}
+
+/**
+ * Pika and other IndieWeb platforms mark a post up as an `.h-entry` with its body in `.e-content`.
+ * A single post has exactly one entry with a body: replies nested in it don't count, and lists of
+ * posts show several bodies or none.
+ */
+function findEntryBody(root: Document): Element | null {
+  const bodies = [...root.querySelectorAll('.h-entry .e-content')].filter(
+    (body) => !body.closest('.h-entry')?.parentElement?.closest('.h-entry'),
+  );
+  return bodies.length === 1 ? (bodies[0] ?? null) : null;
 }
 
 /** `auto`, or `before:`, `after:`, `prepend:` or `append:` and a CSS selector. */

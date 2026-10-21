@@ -27,7 +27,7 @@ All widgets on a page load with a single request.
 
 ### Only a header or footer field?
 
-The script can place the widget itself. With `data-mount="auto"` it goes at the end of the post body on single posts in Ghost and WordPress, whatever the theme, and stays out of pages, the home page and archives. `data-label` and `data-variant` work like the attributes above.
+The script can place the widget itself. With `data-mount="auto"` it goes at the end of the post body on single posts in Ghost, WordPress, Pika and other IndieWeb platforms, whatever the theme, and stays out of pages, the home page and archives. `data-label` and `data-variant` work like the attributes above.
 
 ```html
 <script src="https://pagemoji.magicpages.co/v1/pagemoji.js" defer
@@ -36,7 +36,9 @@ The script can place the widget itself. With `data-mount="auto"` it goes at the 
   data-mount="auto"></script>
 ```
 
-`auto` looks for Ghost's `.gh-content`, and otherwise for the element with the most paragraphs, preferring one inside `<article>` or `<main>` when a short post leaves several tied. To choose the spot yourself, give `before:`, `after:`, `prepend:` or `append:` and a CSS selector, e.g. `data-mount="after:.post-body"`; nothing happens on pages where the selector doesn't match.
+`auto` looks for Ghost's `.gh-content`, and otherwise for the element with the most paragraphs, preferring one inside `<article>` or `<main>` when a short post leaves several tied. Outside Ghost and WordPress, it looks for the one `.e-content` of an `.h-entry`. To choose the spot yourself, give `before:`, `after:`, `prepend:` or `append:` and a CSS selector, e.g. `data-mount="after:.post-body"`; nothing happens on pages where the selector doesn't match.
+
+The widget is placed once per page load. Sites that change pages without reloading, such as those using Turbo, need the element in the post template, or created with `document.createElement('pagemoji-reactions')` after each page change.
 
 ## Platforms
 

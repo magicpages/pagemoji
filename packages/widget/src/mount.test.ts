@@ -70,6 +70,31 @@ describe('resolveMount', () => {
     }
   });
 
+  it('finds the body of the single h-entry on Pika and other IndieWeb platforms', () => {
+    const doc = page(`<body class="site-post-body site-post-131876"><main>
+      <article class="site-post h-entry"><div class="e-content">${paragraphs(1)}</div>
+        <div class="h-entry"><div class="e-content">Reply.</div></div></article>
+      <ul><li class="h-entry"><a class="u-url">Other post</a></li></ul></main></body>`);
+
+    expect(resolveMount('auto', doc)).toEqual({
+      target: doc.querySelector('article > .e-content'),
+      where: 'append',
+    });
+  });
+
+  it('stays out of h-entry lists, page content and Ghost or WordPress pages', () => {
+    const entry = `<article class="h-entry"><div class="e-content">${paragraphs(3)}</div></article>`;
+    for (const html of [
+      `<body>${entry}${entry}</body>`,
+      `<body class="site-home-page"><div class="e-content">${paragraphs(2)}</div>
+        <ul><li class="h-entry"><a class="u-url">Post</a></li></ul></body>`,
+      `<body class="page-template-default page page-id-2">${entry}</body>`,
+      `<body class="page-template">${entry}</body>`,
+    ]) {
+      expect(resolveMount('auto', page(html))).toBeNull();
+    }
+  });
+
   it('places the widget at an explicit selector, and only where it matches', () => {
     const doc = page('<body><div class="post"></div></body>');
 
