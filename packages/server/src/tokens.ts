@@ -12,6 +12,9 @@ export function parseReadTokens(value = ''): string[] {
     .split(',')
     .map((token) => token.trim())
     .filter(Boolean);
+  if (tokens.length === 0 && value.trim() !== '') {
+    throw new Error('READ_TOKENS: set, but holds no token.');
+  }
   tokens.forEach((token, index) => {
     if (Buffer.byteLength(token) < MIN_TOKEN_BYTES) {
       throw new Error(`READ_TOKENS: token ${index + 1} is shorter than ${MIN_TOKEN_BYTES} bytes.`);

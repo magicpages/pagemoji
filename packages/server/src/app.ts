@@ -176,8 +176,9 @@ export function createApp({
         seenHosts.clear();
       }
       if (!seenHosts.has(site)) {
-        seenHosts.add(site);
+        // Marked after the write, so a failed write is retried on the next request.
         store.see(site, keys.find((key) => key.startsWith('/')) ?? null, new Date(at));
+        seenHosts.add(site);
       }
     }
 

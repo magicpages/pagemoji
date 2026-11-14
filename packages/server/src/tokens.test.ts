@@ -18,6 +18,7 @@ describe('parseReadTokens', () => {
     expect(() => parseReadTokens(`${A},${B},${A}`)).toThrow(
       'READ_TOKENS: token 3 repeats an earlier one.',
     );
+    expect(() => parseReadTokens(' , ,')).toThrow('READ_TOKENS: set, but holds no token.');
   });
 });
 
