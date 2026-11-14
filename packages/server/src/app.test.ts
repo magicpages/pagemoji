@@ -339,6 +339,22 @@ describe('GET /v1/hosts/:host', () => {
     expect((await hosts('example.com', bearer(TOKEN))).status).toBe(401);
   });
 
+  it('finds an internationalised domain written in Unicode or punycode', async () => {
+    const { react, counts, hosts } = setup({ readTokens: [TOKEN] });
+    const origin = 'https://xn--bcher-kva.example';
+    await react(like({ url: 'https://bücher.example/post' }), { origin });
+    await counts('host=xn--bcher-kva.example&key=/post&emoji=❤️', undefined, { origin });
+
+    for (const host of [encodeURIComponent('www.Bücher.example'), 'xn--bcher-kva.example']) {
+      expect(await (await hosts(host, bearer(TOKEN))).json()).toMatchObject({
+        host: 'xn--bcher-kva.example',
+        lastSeenPath: '/post',
+      });
+    }
+    const read = await counts('host=bücher.example&key=/post&emoji=❤️', undefined, bearer(TOKEN));
+    expect(await read.json()).toEqual({ counts: { '/post': { '❤️': 1 } } });
+  });
+
   it('is 404 for a host no widget was seen on', async () => {
     const { hosts } = setup({ readTokens: [TOKEN] });
     const response = await hosts('example.com', bearer(TOKEN));

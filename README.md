@@ -117,7 +117,7 @@ Animations play only when the reader reacts, and are switched off for readers wh
 
 - Nothing is stored on the reader's device: no cookies, no `localStorage`, nothing. Reactions don't survive a reload because there is nowhere to keep them.
 - Requests carry no cookies and no referrer, only the page, the emoji and whether it was added or removed.
-- The database holds two things: a count per page and emoji, and per site when the widget last loaded counts there: the host, one page path the widget asked for and the time. It is written at most once per site and hour, and only for requests from the site itself. Nothing in it is about the reader.
+- The database holds two things: a count per page and emoji, and per site when the widget last loaded counts there: the host, one page path the widget asked for and the time. It is written at most once per site and hour, and only for requests whose `Origin` is the site, a hint that the widget is installed rather than proof, since any client can send any `Origin`. Nothing in it is about the reader.
 - Rate limiting and the one-reaction-per-reader rule run in memory, on an HMAC of the IP address (of its /64 for IPv6, the block one connection is given) under a random key. The key is replaced every hour, together with everything recorded under it. IP addresses are never stored or logged.
 - The widget loads nothing from third parties.
 
@@ -175,7 +175,7 @@ Each client gets 60 requests per minute. A service sending one of the `READ_TOKE
 }
 ```
 
-`lastSeenAt` is the first counts request from the site in that hour, so it lags by up to an hour. `lastSeenPath` is the first path in that request, or `null` when the widget asked only for page IDs. Only requests whose `Origin` is the site (and allowed by `ALLOWED_ORIGINS`) count, never those with a read token.
+`lastSeenAt` is the first counts request from the site in that hour, so it lags by up to an hour. `lastSeenPath` is the first path in that request, or `null` when the widget asked only for page IDs. Only requests whose `Origin` is the site (and allowed by `ALLOWED_ORIGINS`) count, never those with a read token. Any client can send any `Origin`, so this is a hint that the widget is installed, not proof.
 
 ## npm
 

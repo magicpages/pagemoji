@@ -1,3 +1,4 @@
+import { domainToASCII } from 'node:url';
 import { isEmoji } from '@magicpages/pagemoji/embed';
 import {
   MAX_EMOJIS_PER_WIDGET,
@@ -42,6 +43,14 @@ type Env = { Variables: { client: string; service: boolean } };
 
 function parseUrl(value: string): URL | null {
   return value.length <= MAX_URL_LENGTH && URL.canParse(value) ? new URL(value) : null;
+}
+
+/**
+ * A host as given by a caller, keyed as the widget keys it: from `URL.hostname`,
+ * so punycode for internationalised domains, and without `www.`.
+ */
+function siteHost(value: string): string {
+  return normalizeHost(domainToASCII(value) || value);
 }
 
 function parseReaction(text: string): { request: ReactionRequest; url: URL } | null {
@@ -156,7 +165,7 @@ export function createApp({
     ) {
       return error(c, 400, 'Expected host, 1 to 100 keys and 1 to 5 emojis.');
     }
-    const site = normalizeHost(host);
+    const site = siteHost(host);
 
     // A widget on the site, not a service reading its counts: note host, path
     // and time, so its owner can tell the widget is installed. Nothing else.
@@ -180,7 +189,7 @@ export function createApp({
   app.get('/v1/hosts/:host', (c) => {
     const token = bearer(c);
     if (token === undefined || !isReadToken(token)) return limit(c) ?? unauthorized(c);
-    const host = normalizeHost(c.req.param('host'));
+    const host = siteHost(c.req.param('host'));
     const sighting = store.sighting(host);
     if (!sighting) return error(c, 404, 'No widget seen on this host.');
     return c.json<HostResponse>({ host, ...sighting });
