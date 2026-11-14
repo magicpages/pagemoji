@@ -117,7 +117,7 @@ Animations play only when the reader reacts, and are switched off for readers wh
 
 - Nothing is stored on the reader's device: no cookies, no `localStorage`, nothing. Reactions don't survive a reload because there is nowhere to keep them.
 - Requests carry no cookies and no referrer, only the page, the emoji and whether it was added or removed.
-- The database holds one thing: a count per page and emoji.
+- The database holds two things: a count per page and emoji, and per site when the widget last loaded counts there: the host, one page path the widget asked for and the time. It is written at most once per site and hour, and only for requests from the site itself. Nothing in it is about the reader.
 - Rate limiting and the one-reaction-per-reader rule run in memory, on an HMAC of the IP address (of its /64 for IPv6, the block one connection is given) under a random key. The key is replaced every hour, together with everything recorded under it. IP addresses are never stored or logged.
 - The widget loads nothing from third parties.
 
@@ -143,12 +143,13 @@ volumes:
 
 Then load the script from your own server: `https://pagemoji.example.com/v1/pagemoji.js`.
 
-| Variable             | Default                          |                                                                                                                                      |
-| -------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `PORT`               | `3000`                           |                                                                                                                                      |
-| `DATABASE_PATH`      | `/data/pagemoji.db` in the image | SQLite file.                                                                                                                         |
-| `ALLOWED_ORIGINS`    | `*`                              | Comma-separated origins allowed to use the server.                                                                                   |
-| `TRUST_PROXY_HEADER` |                                  | Header with the client IP behind a reverse proxy, e.g. `X-Forwarded-For`. The last address is used, so your proxy must append to it. |
+| Variable             | Default                          |                                                                                                                                        |
+| -------------------- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `PORT`               | `3000`                           |                                                                                                                                        |
+| `DATABASE_PATH`      | `/data/pagemoji.db` in the image | SQLite file.                                                                                                                           |
+| `ALLOWED_ORIGINS`    | `*`                              | Comma-separated origins allowed to use the server.                                                                                     |
+| `TRUST_PROXY_HEADER` |                                  | Header with the client IP behind a reverse proxy, e.g. `X-Forwarded-For`. The last address is used, so your proxy must append to it.   |
+| `READ_TOKENS`        |                                  | Comma-separated read tokens, one per service that reads counts on your behalf. At least 32 bytes each, all different. See [API](#api). |
 
 Run a single instance: the rate limits live in memory.
 
@@ -160,8 +161,21 @@ Run a single instance: the rate limits live in memory.
 | `POST /v1/reactions`                 | `{ url, page?, emoji, action: "add" \| "remove" }`, sent as `text/plain`. The `Origin` must match the URL's host. |
 | `GET /v1/pagemoji.js`                | The widget.                                                                                                       |
 | `GET /healthz`                       | Health check.                                                                                                     |
+| `GET /v1/hosts/:host`                | When the widget was last seen on a site. Read token only.                                                         |
 
-Each client gets 60 requests per minute.
+Each client gets 60 requests per minute. A service sending one of the `READ_TOKENS` as `Authorization: Bearer <token>` has no per-client limit on `GET /v1/counts`; the key and emoji limits still apply. A wrong token is answered with `401` and counts against the limit. Without `READ_TOKENS`, the header is ignored.
+
+`GET /v1/hosts/:host` answers `401` without a valid read token (counted against the limit like any request), `404` when the widget was never seen on the host, and otherwise the following. `www.` is ignored, as everywhere.
+
+```json
+{
+  "host": "example.com",
+  "lastSeenAt": "2026-01-01T12:00:00.000Z",
+  "lastSeenPath": "/my-post"
+}
+```
+
+`lastSeenAt` is the first counts request from the site in that hour, so it lags by up to an hour. `lastSeenPath` is the first path in that request, or `null` when the widget asked only for page IDs. Only requests whose `Origin` is the site (and allowed by `ALLOWED_ORIGINS`) count, never those with a read token.
 
 ## npm
 

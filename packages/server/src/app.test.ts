@@ -16,6 +16,7 @@ function setup(overrides: Partial<AppOptions> & { requestsPerMinute?: number } =
     allowedOrigins: ['*'],
     widget: '/* widget */',
     clientIp: (c) => c.req.header('x-test-ip') ?? '192.0.2.1',
+    now: () => now,
     ...options,
   });
 
@@ -28,10 +29,12 @@ function setup(overrides: Partial<AppOptions> & { requestsPerMinute?: number } =
       headers: { 'content-type': 'text/plain', origin, 'x-test-ip': ip },
       body: JSON.stringify(body),
     });
-  const counts = (query: string, ip = '192.0.2.1') =>
-    app.request(`/v1/counts?${query}`, { headers: { 'x-test-ip': ip } });
+  const counts = (query: string, ip = '192.0.2.1', headers: Record<string, string> = {}) =>
+    app.request(`/v1/counts?${query}`, { headers: { 'x-test-ip': ip, ...headers } });
+  const hosts = (host: string, headers: Record<string, string> = {}) =>
+    app.request(`/v1/hosts/${host}`, { headers });
 
-  return { app, react, counts, advance: (ms: number) => (now += ms) };
+  return { app, react, counts, hosts, advance: (ms: number) => (now += ms) };
 }
 
 const like = (extra: Record<string, unknown> = {}) => ({
@@ -223,5 +226,123 @@ describe('rate limit', () => {
     expect((await counts(query, '2001:db8::2')).status).toBe(200);
     expect((await counts(query, '2001:db8::3')).status).toBe(429);
     expect((await counts(query, '2001:db8:0:1::1')).status).toBe(200);
+  });
+});
+
+const TOKEN = 'portal-token-'.padEnd(40, 'x');
+const bearer = (token: string) => ({ authorization: `Bearer ${token}` });
+const query = 'host=example.com&key=/&emoji=❤️';
+
+describe('read tokens', () => {
+  it('lift the per-client limit on counts, and nothing else', async () => {
+    const { counts } = setup({
+      requestsPerMinute: 1,
+      readTokens: ['other-'.padEnd(40, 'y'), TOKEN],
+    });
+    for (let i = 0; i < 5; i++) {
+      expect((await counts(query, undefined, bearer(TOKEN))).status).toBe(200);
+    }
+    expect((await counts(query)).status).toBe(200);
+    expect((await counts(query)).status).toBe(429);
+
+    const keys = Array.from({ length: 101 }, (_, i) => `key=/${i}`).join('&');
+    const tooMany = await counts(`host=example.com&${keys}&emoji=❤️`, undefined, bearer(TOKEN));
+    expect(tooMany.status).toBe(400);
+  });
+
+  it.each([
+    ['a wrong token', bearer('wrong-'.padEnd(40, 'z'))],
+    ['a prefix of the token', bearer(TOKEN.slice(0, -1))],
+    ['another scheme', { authorization: `Basic ${TOKEN}` }],
+  ])('refuse %s, which still counts against the limit', async (_, headers) => {
+    const { counts } = setup({ requestsPerMinute: 1, readTokens: [TOKEN] });
+    const refused = await counts(query, undefined, headers);
+    expect(refused.status).toBe(401);
+    expect(refused.headers.get('www-authenticate')).toBe('Bearer');
+    expect((await counts(query, undefined, headers)).status).toBe(429);
+  });
+
+  it('change nothing while READ_TOKENS is unset', async () => {
+    const { counts } = setup({ requestsPerMinute: 1 });
+    expect((await counts(query, undefined, bearer(TOKEN))).status).toBe(200);
+    expect((await counts(query, undefined, bearer(TOKEN))).status).toBe(429);
+  });
+});
+
+describe('last seen', () => {
+  it('notes host, path and time from the first counts request per host and hour', async () => {
+    const { counts, hosts, advance } = setup({ readTokens: [TOKEN] });
+    await counts('host=www.example.com&key=id:abc&key=/post&key=/other&emoji=❤️', undefined, {
+      origin: 'https://www.example.com',
+    });
+    advance(30 * 60_000);
+    await counts('host=example.com&key=/later&emoji=❤️', undefined, {
+      origin: 'https://example.com',
+    });
+
+    const seen = await hosts('www.example.com', bearer(TOKEN));
+    expect(await seen.json()).toEqual({
+      host: 'example.com',
+      lastSeenAt: '2026-01-01T12:00:00.000Z',
+      lastSeenPath: '/post',
+    });
+
+    advance(30 * 60_000);
+    await counts('host=example.com&key=id:abc&emoji=❤️', undefined, {
+      origin: 'https://example.com',
+    });
+    expect(await (await hosts('example.com', bearer(TOKEN))).json()).toEqual({
+      host: 'example.com',
+      lastSeenAt: '2026-01-01T13:00:00.000Z',
+      lastSeenPath: null,
+    });
+  });
+
+  it.each([
+    ['a read token', { origin: 'https://example.com', ...bearer(TOKEN) }],
+    ['no origin', {}],
+    ['another site', { origin: 'https://evil.example' }],
+  ])('notes nothing for a request with %s', async (_, headers) => {
+    const { counts, hosts } = setup({ readTokens: [TOKEN] });
+    expect((await counts('host=example.com&key=/post&emoji=❤️', undefined, headers)).status).toBe(
+      200,
+    );
+    expect((await hosts('example.com', bearer(TOKEN))).status).toBe(404);
+  });
+
+  it('notes nothing from origins outside ALLOWED_ORIGINS', async () => {
+    const { counts, hosts } = setup({
+      readTokens: [TOKEN],
+      allowedOrigins: ['https://other.example'],
+    });
+    await counts(query, undefined, { origin: 'https://example.com' });
+    expect((await hosts('example.com', bearer(TOKEN))).status).toBe(404);
+  });
+});
+
+describe('GET /v1/hosts/:host', () => {
+  it.each([
+    ['no token', {}],
+    ['a wrong token', bearer('wrong-'.padEnd(40, 'z'))],
+  ])('refuses %s, which counts against the limit', async (_, headers) => {
+    const { counts, hosts } = setup({ readTokens: [TOKEN], requestsPerMinute: 2 });
+    await counts(query, undefined, { origin: 'https://example.com' });
+    const response = await hosts('example.com', headers);
+    expect(response.status).toBe(401);
+    expect(response.headers.get('www-authenticate')).toBe('Bearer');
+    expect((await hosts('example.com', headers)).status).toBe(429);
+    expect((await hosts('example.com', bearer(TOKEN))).status).toBe(200);
+  });
+
+  it('refuses every token while READ_TOKENS is unset', async () => {
+    const { hosts } = setup();
+    expect((await hosts('example.com', bearer(TOKEN))).status).toBe(401);
+  });
+
+  it('is 404 for a host no widget was seen on', async () => {
+    const { hosts } = setup({ readTokens: [TOKEN] });
+    const response = await hosts('example.com', bearer(TOKEN));
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: 'No widget seen on this host.' });
   });
 });

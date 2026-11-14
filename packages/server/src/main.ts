@@ -6,6 +6,7 @@ import { getConnInfo } from '@hono/node-server/conninfo';
 import { createApp } from './app.js';
 import { openStore } from './db.js';
 import { Shield } from './shield.js';
+import { parseReadTokens } from './tokens.js';
 
 const port = Number(process.env.PORT ?? 3000);
 const databasePath = process.env.DATABASE_PATH ?? './data/pagemoji.db';
@@ -14,6 +15,7 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? '*')
   .map((origin) => origin.trim())
   .filter(Boolean);
 const proxyHeader = process.env.TRUST_PROXY_HEADER?.trim();
+const readTokens = parseReadTokens(process.env.READ_TOKENS);
 
 mkdirSync(dirname(databasePath), { recursive: true });
 const store = openStore(databasePath);
@@ -27,6 +29,7 @@ const app = createApp({
   shield: new Shield(),
   allowedOrigins,
   widget,
+  readTokens,
   clientIp(c) {
     // The last address is the one our own proxy added; anything before it is
     // whatever the client chose to send.
