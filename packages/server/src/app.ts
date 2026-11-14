@@ -1,3 +1,4 @@
+import { domainToASCII } from 'node:url';
 import { isEmoji } from '@magicpages/pagemoji/embed';
 import {
   MAX_EMOJIS_PER_WIDGET,
@@ -12,11 +13,13 @@ import {
 import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
-import type { Store } from './db.js';
+import type { Sighting, Store } from './db.js';
 import type { Shield } from './shield.js';
+import { tokenMatcher } from './tokens.js';
 
 const MAX_URL_LENGTH = 2048;
 const MAX_BODY_BYTES = 4096;
+const HOUR = 3_600_000;
 
 export interface AppOptions {
   store: Store;
@@ -26,12 +29,28 @@ export interface AppOptions {
   clientIp: (c: Context) => string;
   /** Source of the widget's script-tag build. */
   widget: string;
+  /** `READ_TOKENS`, one per calling service. None: every request is a reader's. */
+  readTokens?: readonly string[];
+  now?: () => number;
 }
 
-type Env = { Variables: { client: string } };
+/** `GET /v1/hosts/:host` */
+interface HostResponse extends Sighting {
+  host: string;
+}
+
+type Env = { Variables: { client: string; service: boolean } };
 
 function parseUrl(value: string): URL | null {
   return value.length <= MAX_URL_LENGTH && URL.canParse(value) ? new URL(value) : null;
+}
+
+/**
+ * A host as given by a caller, keyed as the widget keys it: from `URL.hostname`,
+ * so punycode for internationalised domains, and without `www.`.
+ */
+function siteHost(value: string): string {
+  return normalizeHost(domainToASCII(value) || value);
 }
 
 function parseReaction(text: string): { request: ReactionRequest; url: URL } | null {
@@ -62,29 +81,74 @@ export function createApp({
   allowedOrigins,
   clientIp,
   widget,
+  readTokens = [],
+  now = Date.now,
 }: AppOptions): Hono<Env> {
   const app = new Hono<Env>();
   const anyOrigin = allowedOrigins.includes('*');
-  const error = (c: Context, status: 400 | 403 | 413 | 429 | 500, message: string) =>
+  const error = (c: Context, status: 400 | 401 | 403 | 404 | 413 | 429 | 500, message: string) =>
     c.json<ErrorResponse, typeof status>({ error: message }, status);
+
+  /** Whether the request comes from a page on the host, through an allowed origin. */
+  const fromHost = (c: Context, host: string): boolean => {
+    const origin = parseUrl(c.req.header('origin') ?? '');
+    return (
+      origin !== null &&
+      (anyOrigin || allowedOrigins.includes(origin.origin)) &&
+      normalizeHost(origin.hostname) === normalizeHost(host)
+    );
+  };
+
+  const isReadToken = tokenMatcher(readTokens);
+  /**
+   * The bearer token, `''` for any other `Authorization`, and undefined without
+   * one or when no read tokens are configured, so self-hosters see no change.
+   */
+  const bearer = (c: Context): string | undefined => {
+    const authorization = c.req.header('authorization');
+    if (readTokens.length === 0 || authorization === undefined) return undefined;
+    return /^Bearer (.+)$/i.exec(authorization)?.[1] ?? '';
+  };
+  const unauthorized = (c: Context) => {
+    c.header('WWW-Authenticate', 'Bearer');
+    return error(c, 401, 'Expected a valid read token.');
+  };
+
+  /** Counts a request against its client's limit. A response when over it. */
+  const limit = (c: Context<Env>): Response | undefined => {
+    const client = shield.client(clientIp(c));
+    const wait = shield.limit(client);
+    if (wait > 0) {
+      c.header('Retry-After', String(wait));
+      return error(c, 429, 'Too many requests.');
+    }
+    c.set('client', client);
+    return undefined;
+  };
 
   app.use(
     '/v1/*',
     cors({ origin: anyOrigin ? '*' : [...allowedOrigins], allowMethods: ['GET', 'POST'] }),
   );
 
-  for (const path of ['/v1/counts', '/v1/reactions']) {
-    app.use(path, async (c, next) => {
-      const client = shield.client(clientIp(c));
-      const wait = shield.limit(client);
-      if (wait > 0) {
-        c.header('Retry-After', String(wait));
-        return error(c, 429, 'Too many requests.');
-      }
-      c.set('client', client);
-      return next();
-    });
-  }
+  app.use('/v1/reactions', async (c, next) => limit(c) ?? next());
+
+  // A service with a read token asks for many sites from one address, so it
+  // has no per-client limit. A wrong token still counts against the limit, so
+  // guessing stays slow, and is refused rather than read as no token, so a
+  // misconfigured service fails loudly instead of running into 429s.
+  app.use('/v1/counts', async (c, next) => {
+    const token = bearer(c);
+    const service = token !== undefined && isReadToken(token);
+    c.set('service', service);
+    if (service) return next();
+    return limit(c) ?? (token === undefined ? next() : unauthorized(c));
+  });
+
+  // Hosts noted this hour. Cleared on the hour, so it holds an hour's hosts at
+  // most, and the database sees at most one write per host and hour.
+  let seenHour = -1;
+  const seenHosts = new Set<string>();
 
   app.get('/v1/counts', (c) => {
     const host = c.req.query('host');
@@ -101,8 +165,35 @@ export function createApp({
     ) {
       return error(c, 400, 'Expected host, 1 to 100 keys and 1 to 5 emojis.');
     }
+    const site = siteHost(host);
+
+    // A widget on the site, not a service reading its counts: note host, path
+    // and time, so its owner can tell the widget is installed. Nothing else.
+    if (!c.get('service') && fromHost(c, site)) {
+      const at = now();
+      if (Math.floor(at / HOUR) !== seenHour) {
+        seenHour = Math.floor(at / HOUR);
+        seenHosts.clear();
+      }
+      if (!seenHosts.has(site)) {
+        // Marked after the write, so a failed write is retried on the next request.
+        store.see(site, keys.find((key) => key.startsWith('/')) ?? null, new Date(at));
+        seenHosts.add(site);
+      }
+    }
+
     c.header('Cache-Control', 'public, max-age=10');
-    return c.json({ counts: store.counts(normalizeHost(host), keys, emojis) });
+    return c.json({ counts: store.counts(site, keys, emojis) });
+  });
+
+  // Token only. Failed attempts count against the per-client limit, as on counts.
+  app.get('/v1/hosts/:host', (c) => {
+    const token = bearer(c);
+    if (token === undefined || !isReadToken(token)) return limit(c) ?? unauthorized(c);
+    const host = siteHost(c.req.param('host'));
+    const sighting = store.sighting(host);
+    if (!sighting) return error(c, 404, 'No widget seen on this host.');
+    return c.json<HostResponse>({ host, ...sighting });
   });
 
   // Stops reading at the limit, rather than reading the whole body and checking it after.
@@ -118,12 +209,7 @@ export function createApp({
 
     // The body is sent as text/plain, which browsers send without a preflight,
     // so CORS alone doesn't keep other sites out: check the origin here.
-    const origin = parseUrl(c.req.header('origin') ?? '');
-    if (
-      !origin ||
-      (!anyOrigin && !allowedOrigins.includes(origin.origin)) ||
-      normalizeHost(origin.hostname) !== normalizeHost(url.hostname)
-    ) {
+    if (!fromHost(c, url.hostname)) {
       return error(c, 403, 'Reactions must come from the page they are for.');
     }
 
